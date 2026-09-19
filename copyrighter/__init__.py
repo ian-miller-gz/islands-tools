@@ -1,0 +1,12 @@
+from __future__ import annotations
+import sys
+from pathlib import Path
+
+DEV_ROOT = Path(__file__).resolve().parent.parent
+if str(DEV_ROOT) not in sys.path:
+  sys.path.insert(0, str(DEV_ROOT))
+
+from .copyrighter import Copyrighter
+from .processor import Processor
+
+__all__ = ['Copyrighter', 'Processor']
