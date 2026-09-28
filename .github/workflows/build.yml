@@ -1,0 +1,30 @@
+name: build
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          path: tools
+      - id: engine
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'EOT'
+          import tomllib
+          islands = tomllib.load(open('tools/pyproject.toml', 'rb'))['tool']['islands']
+          print(f"ref={islands['engine']}")
+          print(f"suites={' '.join(islands['suites'])}")
+          EOT
+      - run: git clone --quiet --branch "${{ steps.engine.outputs.ref }}" --depth 1 https://github.com/ian-miller-gz/islands engine
+      - run: |
+          python3 -m venv .venv
+          .venv/bin/python3 -m pip install --quiet pytest pyyaml -e tools
+      - run: |
+          stated="$(.venv/bin/python3 -c 'import make.version as v; print(v.stated())')"
+          sed -i "s/^tools: .*/tools: $stated/" engine/configs/make.yaml
+      - run: cd engine && ../.venv/bin/python3 -m pytest -q ${{ steps.engine.outputs.suites }}
+      - run: .venv/bin/python3 -m pytest -q tools/tests

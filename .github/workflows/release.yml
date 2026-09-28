@@ -1,0 +1,39 @@
+name: release
+on:
+  push:
+    branches: [stable, latest]
+    tags: ['[0-9]*.[0-9]*.[0-9]*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  lines:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+      - run: |
+            case "${{ github.ref }}" in
+              refs/tags/*)
+                python3 .github/release.py tag "${{ github.ref_name }}" "${{ github.sha }}" ;;
+              *)
+                python3 .github/release.py line "${{ github.ref_name }}" "${{ github.sha }}" \
+                  --before "${{ github.event.before || '0000000000000000000000000000000000000000' }}" ;;
+            esac
+  build:
+    needs: lines
+    uses: ./.github/workflows/build.yml
+  publish:
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: [lines, build]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - run: python3 .github/release.py notes "${{ github.ref_name }}" "${{ github.sha }}" > notes.md
+      - run: |
+            gh release view "${{ github.ref_name }}" >/dev/null 2>&1 ||
+              gh release create "${{ github.ref_name }}" --verify-tag \
+                --title "${{ github.ref_name }}" --notes-file notes.md

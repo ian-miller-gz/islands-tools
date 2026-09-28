@@ -1,0 +1,22 @@
+name: promote
+on:
+  workflow_dispatch:
+    inputs:
+      line:
+        type: choice
+        options: [latest, stable]
+        required: true
+      version:
+        type: string
+        required: true
+permissions:
+  contents: write
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+      - run: python3 .github/release.py promote "${{ inputs.line }}" "${{ inputs.version }}"
+      - run: git push origin "refs/tags/${{ inputs.version }}^{commit}:refs/heads/${{ inputs.line }}"
