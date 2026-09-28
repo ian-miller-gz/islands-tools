@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import yaml
+from make import version
 
 import common.log as logging
 import make.config as CONFIG
@@ -251,6 +252,7 @@ class Initializer:
     self._configure(config)
     self._overlay(config)
     self._vet(config)
+    version.require(config)
     self._residents(config)
     self._project_cfg = config
     return config
