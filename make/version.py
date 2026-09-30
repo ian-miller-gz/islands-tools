@@ -1,5 +1,6 @@
 from __future__ import annotations
 import re
+from importlib import metadata
 from pathlib import Path
 
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
@@ -7,6 +8,8 @@ KEY = "tools"
 
 
 def stated() -> str:
+  if not PYPROJECT.exists():
+    return metadata.version("islands-tools")
   found = re.search(r'^version\s*=\s*"([^"]+)"', PYPROJECT.read_text(), re.M)
   return found.group(1) if found else "0.0.0"
 
