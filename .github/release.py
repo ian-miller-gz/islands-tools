@@ -8,6 +8,7 @@ VERSION = re.compile(r'^\s*ENGINE_VERSION:\s*"([^"]*)"', re.M)
 RELEASED = re.compile(r'^release:\s*(\S+)', re.M)
 PROJECT = re.compile(r'^version\s*=\s*"([^"]*)"', re.M)
 TOOLS = re.compile(r'^tools:\s*(\S+)', re.M)
+SOUND = re.compile(r'^sound:\s*(\S+)', re.M)
 RELEASE = re.compile(r'^\d+\.\d+\.\d+$')
 WORKING = re.compile(r'^\d+\.\d+$')
 LINE = re.compile(r'^(\d+\.\d+)-[a-z0-9]+(?:-[a-z0-9]+)*$')
@@ -17,7 +18,9 @@ DAY = 24 * 60 * 60
 CONFIG = 'configs/make.yaml'
 MANIFEST = 'manifest.yaml'
 PYPROJECT = 'pyproject.toml'
-NUMBERED = {CONFIG: ('engine', VERSION), MANIFEST: ('bundle', RELEASED), PYPROJECT: ('tools', PROJECT)}
+PLUGINS = 'plugins.yaml'
+NUMBERED = {CONFIG: ('engine', VERSION), MANIFEST: ('bundle', RELEASED), PYPROJECT: ('tools', PROJECT),
+            PLUGINS: ('plugins', RELEASED)}
 TOOL = 'submodules/islands-tools'
 PRIVATE = ('agents', 'claude', 'recordings')
 FORBIDDEN = tuple('.' + name for name in PRIVATE) + ('CLAUDE' + '.md', 'docs', 'temp')
@@ -47,6 +50,8 @@ def stated(text):
 
 
 def kind(text):
+  if SOUND.search(text):
+    return 'plugins'
   for component, pattern in NUMBERED.values():
     if pattern.search(text):
       return component
@@ -142,14 +147,18 @@ def content(head):
   return head
 
 
-def stable_shape(release):
-  if release[2] != 0:
-    return [f'stable {name(release)} carries a patch number']
+def stable_shape(release, previous=None):
+  if release[2] != 0 and (previous is None or release[:2] != previous[:2]):
+    return [f'stable {name(release)} carries a patch number off its line']
   return []
 
 
 def stable_advance(release, previous):
-  if previous is not None and release[:2] <= previous[:2]:
+  if previous is None:
+    return []
+  if release[:2] == previous[:2]:
+    return [] if release > previous else [f'{name(release)} does not pass stable {name(previous)}']
+  if release[:2] < previous[:2]:
     return [f'minor unraised from stable {name(previous)}']
   return []
 
@@ -212,8 +221,10 @@ def check_stable(before, head, now):
   release = version(head)
   previous = numbered(before) if exists(before) else None
   promoted = content(head)
-  return (stable_shape(release) + stable_advance(release, previous)
-          + promotion(head, promoted, tip('latest')) + soak(committed(promoted), now))
+  patch = previous is not None and release[:2] == previous[:2]
+  return (stable_shape(release, previous) + stable_advance(release, previous)
+          + promotion(head, promoted, tip('latest'))
+          + ([] if patch else soak(committed(promoted), now)))
 
 
 def check_latest(before, head):
