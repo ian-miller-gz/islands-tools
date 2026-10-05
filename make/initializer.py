@@ -315,12 +315,32 @@ class Initializer:
     return known
 
   def _overlay(self, config: Tree) -> None:
+    self._compose(config)
+    self._spell(config)
+
+  def _spell(self, config: Tree) -> None:
+    names = self._names(config)
+    for entry in config.get("builds") or []:
+      name = entry.get("name")
+      if not name or entry.get("named") is None:
+        continue
+      self._declare(
+        config, entry.get("named"), names.get(name, name), f"build {name}")
+
+  def _names(self, config: Tree) -> dict:
+    tokens = self._tokens(config)
+    block = config.get("toolchain") or {}
+    chosen = (block.get("options") or {}).get(tokens.get(block.get("selector")))
+    return CONFIG.toolchain(chosen, tokens).get("names") or {}
+
+  def _compose(self, config: Tree) -> None:
     vocabulary = config.get("manifest") or {}
+    for bundle, static in self._bundles(config):
+      self._declare(config, static.get("bundle"), bundle, "statics bundle")
     selected = self._bundle(config)
     if selected is None:
       return
     bundle, static = selected
-    self._declare(config, static, bundle)
     if not (vocabulary.get("axes") or vocabulary.get("keys")):
       return
     file = vocabulary.get("path") or "manifest.yaml"
@@ -394,17 +414,18 @@ class Initializer:
         merged[key] = value
     return merged
 
-  def _declare(self, config: Tree, static: Tree, bundle: str) -> None:
-    declaration = static.get("bundle")
+  def _declare(
+    self, config: Tree, declaration: Tree | None, value: str, owner: str
+  ) -> None:
     if declaration is None:
       return
     group = declaration.get("group")
     directive = declaration.get("directive")
     if not group or not directive:
-      log.error(f"statics bundle declaration needs group/directive: {declaration}")
+      log.error(f"{owner} declaration needs group/directive: {declaration}")
       self.errored = True
       return
-    config.setdefault("directives", {}).setdefault(group, {})[directive] = bundle
+    config.setdefault("directives", {}).setdefault(group, {})[directive] = value
 
   def _document(self, path: Path) -> Tree:
     try:
@@ -511,13 +532,18 @@ class Initializer:
     return members[0] if members else ""
 
   def _bundle(self, config: Tree) -> tuple[str, Tree] | None:
+    found = self._bundles(config)
+    return found[0] if found else None
+
+  def _bundles(self, config: Tree) -> list[tuple[str, Tree]]:
     tokens = self._tokens(config)
+    found = []
     for static in config.get("statics") or []:
       selected = tokens.get(static.get("selector"))
       for subtree, value in (static.get("options") or {}).items():
         if selected == value:
-          return subtree, static
-    return None
+          found.append((subtree, static))
+    return found
 
   @staticmethod
   def _spelled(axis, value):
@@ -567,6 +593,7 @@ class Initializer:
         "path": Path(path),
         "destinations": entry.get("output_destinations") or [],
         "static": self._is_static(path),
+        "folds": self._folds(path),
         "archive": bool(entry.get("archive")),
         "defines": self._defines(entry),
       })
@@ -652,16 +679,29 @@ class Initializer:
         flat[name] = value
     return flat
 
-  def _is_static(self, path: str) -> bool:
+  def _static(self, path: str) -> tuple[Tree, bool] | None:
     text = str(path).replace("\\", "/")
     config = self._project_config()
     tokens = self._tokens(config)
+    claimed = None
     for static in config.get("statics") or []:
       selected = tokens.get(static.get("selector"))
       for subtree, value in (static.get("options") or {}).items():
-        if subtree in text:
-          return selected == value
-    return False
+        if subtree not in text:
+          continue
+        if claimed is None or len(subtree) > len(claimed[0]):
+          claimed = (subtree, static, selected == value)
+    return None if claimed is None else (claimed[1], claimed[2])
+
+  def _is_static(self, path: str) -> bool:
+    claimed = self._static(path)
+    return bool(claimed and claimed[1])
+
+  def _folds(self, path: str) -> str | None:
+    claimed = self._static(path)
+    if not claimed or not claimed[1]:
+      return None
+    return claimed[0].get("host") or None
 
   def _is_active_variant(self, path: Path) -> bool:
     text = str(path).replace("\\", "/")

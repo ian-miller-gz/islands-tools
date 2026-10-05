@@ -119,6 +119,7 @@ def toolchain(name: str | None = None, tokens: dict | None = None) -> dict:
     'prebuilt': {},
     'delivery': 'dynamic',
     'engine': None,
+    'names': {},
     'output': {
       'kind': 'native', 'directory': None, 'binary': STAGED, 'library': '.so'},
   }
@@ -136,6 +137,9 @@ def toolchain(name: str | None = None, tokens: dict | None = None) -> dict:
     resolved['delivery'] = delivery(block['delivery'], tokens or {})
   if block.get('engine'):
     resolved['engine'] = block['engine']
+  resolved['names'] = {
+    str(name): str(spelling)
+    for name, spelling in (block.get('names') or {}).items()}
   output = block.get('output') or {}
   for key in ('kind', 'directory', 'binary', 'library'):
     if output.get(key):

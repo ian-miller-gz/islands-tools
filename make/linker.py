@@ -59,7 +59,7 @@ class Linker:
       for link in build.get("links") or []:
         objects.extend(self._collect_objects(link))
     first = build is self.make.builds[0] and not self._sharing()
-    folded = self._statics() if first else []
+    folded = self._statics(build["name"], first)
     objects.extend(folded)
     command = self._build_command(build, objects, bool(folded))
     returncode, output = self._run_link_command(command)
@@ -139,11 +139,17 @@ class Linker:
       *archives, *self._libs(), *self._imports(),
     ]
 
-  def _statics(self) -> list:
+  def _statics(self, host: str | None = None, project: bool = True) -> list:
     objects = []
     for library in getattr(self.make, "libraries", []):
-      if library.get("static"):
-        objects.extend(self._collect_objects(library["path"]))
+      if not library.get("static"):
+        continue
+      folds = library.get("folds")
+      if folds is None and not project:
+        continue
+      if folds is not None and folds != host:
+        continue
+      objects.extend(self._collect_objects(library["path"]))
     return objects
 
   def outputs(self) -> Path:
@@ -251,10 +257,13 @@ class Linker:
         continue
       self._library(library)
 
+  def spelled(self, build: dict) -> str:
+    return (self._tools().get("names") or {}).get(build["name"], build["name"])
+
   def binary(self, build: dict) -> Path:
     seat = self.root / self.outputs()
     os.makedirs(seat, exist_ok=True)
-    return seat / f"{build['name']}{self._suffix('binary')}"
+    return seat / f"{self.spelled(build)}{self._suffix('binary')}"
 
   def staged(self, path: Path, artifact: str) -> Path:
     seat = self.root / self.outputs() / path

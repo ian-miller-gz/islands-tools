@@ -62,9 +62,10 @@ class Make(Initializer):
       binary = output["binary"]
       delivered = "" if binary == CONFIG.STAGED else binary
       for build in getattr(self, "builds", []):
-        src_binary = outputs / f"{build['name']}{binary}"
+        name = self.linker.spelled(build)
+        src_binary = outputs / f"{name}{binary}"
         self._copy_artifact(
-          src_binary, f"{build['name']}{delivered}", build["destinations"])
+          src_binary, f"{name}{delivered}", build["destinations"])
       self._copy_engine(outputs)
     else:
       self._copy_page()
@@ -94,7 +95,7 @@ class Make(Initializer):
     for build in getattr(self, "builds", []):
       if not build["destinations"]:
         continue
-      for artifact in sorted(home.glob(f"{build['name']}.*")):
+      for artifact in sorted(home.glob(f"{self.linker.spelled(build)}.*")):
         self._copy_artifact(artifact, artifact.name, [selected[0]])
 
   def _home(self, directory: str) -> Path:
